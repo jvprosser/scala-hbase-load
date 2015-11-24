@@ -1,0 +1,1 @@
+# scala-hbase-load
