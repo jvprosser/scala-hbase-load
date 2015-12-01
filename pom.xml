@@ -545,7 +545,7 @@
                 <version>2.2</version>
                 <configuration>
                     <shadedArtifactAttached>false</shadedArtifactAttached>
-                    <outputFile>target/Impact1Project.jar</outputFile>
+                    <outputFile>target/scala-hbase-loader.jar</outputFile>
                     <artifactSet>
                         <includes>
                             <include>*:*</include>
