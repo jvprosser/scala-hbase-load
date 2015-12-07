@@ -19,6 +19,10 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 import org.apache.spark.{SparkConf, SparkContext}
 import org.kohsuke.randname.RandomNameGenerator
 
+import java.util.zip.{Inflater, Deflater}
+
+import org.apache.hadoop.hbase.util.Base64
+
 object S92Loader {
 
   val schema = StructType(Array(
@@ -66,6 +70,24 @@ object S92Loader {
     sc.stop()
   }
 
+
+def convertZString(b64gz: String): Array[Byte] = {
+    
+   val inData =  Base64.decodeBytes(b64gz)
+   val inflater = new Inflater()
+   inflater.setInput(inData)
+   val decompressedData = new Array[Byte](inData.size * 2)
+   var count = inflater.inflate(decompressedData)
+   var finalData = decompressedData.take(count)
+
+   while (count > 0) {
+     count = inflater.inflate(decompressedData)
+     finalData = finalData ++ decompressedData.take(count)
+   }
+   return finalData 
+}
+
+
   def generateAndPersist(numOfThreads: Int,
                          sc: SparkContext,
                          connection: Connection,
@@ -96,7 +118,7 @@ val df = sqlContext.load(
     schema = customSchema,
     Map("path" -> inputPath, "header" -> "true", "delimiter" -> "\t"))
 
-      println( "Loaded TSV")
+    println( "Loaded TSV")
 //val selectedData = df.select("year", "model")
 //selectedData.save("newcars.csv", "com.databricks.spark.csv")
 
@@ -110,6 +132,7 @@ val df = sqlContext.load(
     hbaseContext.bulkLoad[Row](df.rdd,
       TableName.valueOf("S92"),
       t => {
+        val rawVals = convertZString(t.getString(VAL_INX      ))
         val rowKey = Bytes.toBytes(HBaseUtils.generatorSaltedRowKey(t.getString(SN_INX),t.getString(OPTIME_INX),t.getString(ID_INX)))
 
         val rdfNameVal   =  new KeyFamilyQualifier(rowKey, family, HBaseUtils.getCQ_PARAM_rdfName   (i))
@@ -124,9 +147,9 @@ val df = sqlContext.load(
           (rdfNameVal   ,Bytes.toBytes(t.getString(RDFNAME_INX  ))),
           (PARAMIDVal   ,Bytes.toBytes(t.getString(PARAMID_INX  ))),
           (PARAMTYPEVal ,Bytes.toBytes(t.getString(PARAMTYPE_INX))),
-          (VALIDVal     ,Bytes.toBytes(t.getString(VALID_INX    ))),
-          (TSVal        ,Bytes.toBytes(t.getString(TS_INX       ))),
-          (VALVal       ,Bytes.toBytes(t.getString(VAL_INX      ))),
+          (VALIDVal     ,Bytes.toBytes(convertZString(t.getString(VALID_INX    )))),
+          (TSVal        ,Bytes.toBytes(convertZString(t.getString(TS_INX       )))),
+          (VALVal       ,Bytes.toBytes(rawVals)),
           (RDFCOUNTVal  ,Bytes.toBytes(i))
         ).iterator
       },
